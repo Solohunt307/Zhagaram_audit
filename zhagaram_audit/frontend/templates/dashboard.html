@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1 class="mb-4 text-dark" style="color: var(--color-dark-blue) !important;"><i class="fas fa-home me-2"></i> System Modules</h1>
+
+<div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4">
+    
+    <div class="col"><a href="/products" class="module-button"><i class="fas fa-boxes fa-2x d-block mb-2"></i> Inventory & Products</a></div>
+    <div class="col"><a href="/purchases" class="module-button"><i class="fas fa-truck-loading fa-2x d-block mb-2"></i> Purchases & Suppliers</a></div>
+    <div class="col"><a href="/sales" class="module-button"><i class="fas fa-file-invoice-dollar fa-2x d-block mb-2"></i> Sales & Billing</a></div>
+    <div class="col"><a href="/customers" class="module-button"><i class="fas fa-users-cog fa-2x d-block mb-2"></i> CRM / Customers</a></div>
+    
+    <div class="col"><a href="/service" class="module-button"><i class="fas fa-tools fa-2x d-block mb-2"></i> Service & Workshop</a></div>
+    <div class="col"><a href="/employees" class="module-button"><i class="fas fa-user-tie fa-2x d-block mb-2"></i> Employee Activity</a></div>
+    <div class="col"><a href="/accounting" class="module-button"><i class="fas fa-chart-line fa-2x d-block mb-2"></i> Accounting & GST</a></div>
+    <div class="col"><a href="/reports" class="module-button"><i class="fas fa-chart-bar fa-2x d-block mb-2"></i> Reports & Analysis</a></div>
+
+</div>
+
+<h2 class="mt-5 mb-3 text-dark-blue"><i class="fas fa-tachometer-alt me-2"></i> Quick Overview</h2>
+<div class="row g-4" id="kpi-section">
+    <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><h5 class="card-title text-primary">Today's Sales</h5><p class="card-text fs-2" id="kpi-sales">Loading...</p></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><h5 class="card-title text-success">Gross Profit (Month)</h5><p class="card-text fs-2" id="kpi-profit">Loading...</p></div></div></div>
+    <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><h5 class="card-title text-info">Outstanding Service</h5><p class="card-text fs-2" id="kpi-service">Loading...</p></div></div></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // This function will fetch data using fetchAPI (from main.js) and populate the KPIs
+    async function loadDashboardKpis() {
+        const kpiResponse = await fetchAPI('/api/kpi/daily');
+        if (kpiResponse && kpiResponse.ok) {
+            const kpi = await kpiResponse.json();
+            document.getElementById('kpi-sales').textContent = `₹${kpi.sales_total.toFixed(2)}`;
+            document.getElementById('kpi-profit').textContent = `₹${kpi.gross_profit.toFixed(2)}`;
+            // (Assuming you will create an API for outstanding services)
+            document.getElementById('kpi-service').textContent = '25 Tickets'; 
+        } else {
+            // Error handling if the API call fails
+            document.getElementById('kpi-sales').textContent = 'N/A';
+            document.getElementById('kpi-profit').textContent = 'N/A';
+        }
+    }
+
+    // Load data after the page is ready
+    window.addEventListener('load', loadDashboardKpis);
+</script>
+{% endblock %}

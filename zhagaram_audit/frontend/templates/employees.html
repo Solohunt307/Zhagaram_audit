@@ -1,0 +1,189 @@
+{% include 'base.html' %}
+
+<div class="container-fluid pt-4 px-4">
+    <div class="row g-4">
+        <div class="col-sm-12 col-md-4">
+            <div class="bg-secondary rounded p-4">
+                <h5 class="mb-4 text-primary"><i class="fas fa-user-plus me-2"></i>Add Staff</h5>
+                <form id="empForm">
+                    <div class="mb-3">
+                        <label class="form-label text-white">Full Name</label>
+                        <input type="text" id="empName" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-white">Role</label>
+                        <select id="empRole" class="form-select">
+                            <option value="Technician">Technician</option>
+                            <option value="Sales">Sales</option>
+                            <option value="Admin">Admin</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-white">Phone</label>
+                        <input type="text" id="empPhone" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-white">Email</label>
+                        <input type="email" id="empEmail" class="form-control">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Save Employee</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="col-sm-12 col-md-8">
+            <div class="bg-secondary rounded p-4">
+                <h5 class="mb-4 text-primary"><i class="fas fa-users me-2"></i>Employee List</h5>
+                <div class="table-responsive">
+                    <table class="table text-white">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Role</th>
+                                <th>Phone</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="empTableBody">
+                            <tr><td colspan="5" class="text-center">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-secondary text-white">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Employee</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editId">
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <input type="text" id="editName" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Role</label>
+                    <select id="editRole" class="form-select">
+                        <option value="Technician">Technician</option>
+                        <option value="Sales">Sales</option>
+                        <option value="Admin">Admin</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Phone</label>
+                    <input type="text" id="editPhone" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" id="editEmail" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" onclick="updateEmployee()" class="btn btn-primary">Update Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+    async function loadEmployees() {
+        const tableBody = document.getElementById('empTableBody');
+        try {
+            const res = await fetch('/api/employees/');
+            const data = await res.json();
+            
+            tableBody.innerHTML = data.length ? data.map(e => `
+                <tr>
+                    <td>${e.id}</td>
+                    <td>${e.name}</td>
+                    <td><span class="badge bg-dark">${e.role}</span></td>
+                    <td>${e.phone}</td>
+                    <td>
+                        <button onclick="openEditModal(${JSON.stringify(e).replace(/"/g, '&quot;')})" class="btn btn-sm btn-outline-warning me-2">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="deleteEmployee(${e.id})" class="btn btn-sm btn-outline-danger">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('') : '<tr><td colspan="5" class="text-center">No staff found.</td></tr>';
+        } catch (err) {
+            tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading data</td></tr>';
+        }
+    }
+
+    function openEditModal(emp) {
+        document.getElementById('editId').value = emp.id;
+        document.getElementById('editName').value = emp.name;
+        document.getElementById('editRole').value = emp.role;
+        document.getElementById('editPhone').value = emp.phone === 'N/A' ? '' : emp.phone;
+        document.getElementById('editEmail').value = emp.email === 'N/A' ? '' : emp.email;
+        new bootstrap.Modal(document.getElementById('editModal')).show();
+    }
+
+    async function updateEmployee() {
+        const id = document.getElementById('editId').value;
+        const payload = {
+            name: document.getElementById('editName').value,
+            role: document.getElementById('editRole').value,
+            phone: document.getElementById('editPhone').value || null,
+            email: document.getElementById('editEmail').value || null
+        };
+
+        const res = await fetch('/api/employees/' + id, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+            loadEmployees();
+        } else {
+            alert("Update failed");
+        }
+    }
+
+    document.getElementById('empForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const payload = {
+            name: document.getElementById('empName').value,
+            role: document.getElementById('empRole').value,
+            phone: document.getElementById('empPhone').value || null,
+            email: document.getElementById('empEmail').value || null
+        };
+
+        const response = await fetch('/api/employees/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            document.getElementById('empForm').reset();
+            loadEmployees();
+        } else {
+            alert("Save failed");
+        }
+    };
+
+    async function deleteEmployee(id) {
+        if(confirm("Delete this employee?")) {
+            await fetch('/api/employees/' + id, { method: 'DELETE' });
+            loadEmployees();
+        }
+    }
+
+    loadEmployees();
+</script>

@@ -1,0 +1,253 @@
+{% include 'base.html' %}
+
+<div class="container-fluid pt-4 px-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="text-primary"><i class="fas fa-tools me-2"></i>Service Workshop</h3>
+        <div class="d-flex gap-2">
+            <input type="text" id="ticketSearch" class="form-control bg-dark text-white border-0" placeholder="Search customer or product..." onkeyup="filterTickets()">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newTicketModal">
+                <i class="fa fa-plus me-2"></i>New Ticket
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-secondary rounded p-4">
+        <div class="table-responsive">
+            <table class="table text-white table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Customer</th>
+                        <th>Product</th>
+                        <th>Technician</th>
+                        <th>Remarks</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="ticketTableBody">
+                    <tr><td colspan="7" class="text-center">Loading service data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editTicketModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-secondary text-white">
+            <div class="modal-header">
+                <h5 class="modal-title text-primary">Edit Ticket #<span id="editTicketIdLabel"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit_ticket_id">
+                <div class="mb-3">
+                    <label class="form-label">Update Status</label>
+                    <select id="edit_status" class="form-select bg-dark text-white border-0">
+                        <option value="OPEN">Open</option>
+                        <option value="PENDING">Pending</option>
+                        <option value="ON HOLD">On Hold</option>
+                        <option value="CLOSED">Closed</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Assign Technician</label>
+                    <select id="edit_technician_id" class="form-select bg-dark text-white border-0">
+                        <option value="">-- Unassigned --</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Progress Remarks</label>
+                    <textarea id="edit_remarks" class="form-control bg-dark text-white border-0" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="saveUpdate()" class="btn btn-primary w-100">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="newTicketModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-secondary text-white">
+            <div class="modal-header border-0">
+                <h5 class="modal-title text-primary">New Service Ticket</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="newTicketForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Customer</label>
+                        <select id="new_customer_id" class="form-select bg-dark text-white border-0" required>
+                            <option value="">-- Select Customer --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Product</label>
+                        <select id="new_product_id" class="form-select bg-dark text-white border-0" required>
+                            <option value="">-- Select Product --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Technician</label>
+                        <select id="new_technician_id" class="form-select bg-dark text-white border-0">
+                            <option value="">-- Unassigned --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Service Remarks</label>
+                        <textarea id="new_remarks" class="form-control bg-dark text-white border-0" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary w-100">Create Ticket</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    let tickets = [];
+
+    async function loadData() {
+        try {
+            const [cRes, pRes, eRes] = await Promise.all([
+                fetch('/api/customers/'), fetch('/api/products/'), fetch('/api/employees/')
+            ]);
+            const [customers, products, employees] = await Promise.all([cRes.json(), pRes.json(), eRes.json()]);
+
+            const techList = employees.filter(e => e.role === 'Technician').map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+            
+            // Populate Technicians
+            document.getElementById('new_technician_id').innerHTML = '<option value="">-- Unassigned --</option>' + techList;
+            document.getElementById('edit_technician_id').innerHTML = '<option value="">-- Unassigned --</option>' + techList;
+            
+            // Populate Customers and Products
+            document.getElementById('new_customer_id').innerHTML = '<option value="">-- Select Customer --</option>' + customers.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            document.getElementById('new_product_id').innerHTML = '<option value="">-- Select Product --</option>' + products.map(p => `<option value="${p.id}">${p.model}</option>`).join('');
+            
+            fetchTickets();
+        } catch (err) {
+            console.error("Failed to load initial data", err);
+        }
+    }
+
+    async function fetchTickets() {
+        const res = await fetch('/api/service/tickets');
+        tickets = await res.json();
+        renderTable(tickets);
+    }
+
+    function renderTable(data) {
+        document.getElementById('ticketTableBody').innerHTML = data.map(t => `
+            <tr>
+                <td>#${t.id}</td>
+                <td>${t.customer_name}</td>
+                <td>${t.product_model}</td>
+                <td>${t.technician_name}</td>
+                <td><small>${t.remarks || '-'}</small></td>
+                <td><span class="badge ${t.status === 'CLOSED' ? 'bg-success' : 'bg-primary'}">${t.status}</span></td>
+                <td>
+                    <button onclick="editTicket(${t.id})" class="btn btn-sm btn-outline-warning me-1"><i class="fa fa-edit"></i></button>
+                    <button onclick="deleteTicket(${t.id})" class="btn btn-sm btn-outline-danger"><i class="fa fa-trash"></i></button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    function filterTickets() {
+        const query = document.getElementById('ticketSearch').value.toLowerCase();
+        const filtered = tickets.filter(t => 
+            t.customer_name.toLowerCase().includes(query) || 
+            t.product_model.toLowerCase().includes(query) ||
+            t.id.toString().includes(query)
+        );
+        renderTable(filtered);
+    }
+
+    function editTicket(id) {
+        const t = tickets.find(ticket => ticket.id === id);
+        if(!t) return;
+        document.getElementById('edit_ticket_id').value = t.id;
+        document.getElementById('editTicketIdLabel').innerText = t.id;
+        document.getElementById('edit_technician_id').value = t.technician_id || "";
+        document.getElementById('edit_status').value = t.status;
+        document.getElementById('edit_remarks').value = t.remarks || "";
+        new bootstrap.Modal(document.getElementById('editTicketModal')).show();
+    }
+
+    async function saveUpdate() {
+        const id = document.getElementById('edit_ticket_id').value;
+        const ticket = tickets.find(t => t.id == id);
+        const status = document.getElementById('edit_status').value;
+        const techVal = document.getElementById('edit_technician_id').value;
+        
+        // Critical: Strict type casting for backend validation
+        const payload = {
+            customer_id: parseInt(ticket.customer_id),
+            product_id: parseInt(ticket.product_id),
+            technician_id: techVal ? parseInt(techVal) : null,
+            remarks: document.getElementById('edit_remarks').value || "",
+            estimate_parts: parseFloat(ticket.estimate_parts) || 0,
+            estimate_labor: parseFloat(ticket.estimate_labor) || 0
+        };
+
+        const res = await fetch(`/api/service/tickets/${id}?status=${encodeURIComponent(status)}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        if(res.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('editTicketModal')).hide();
+            fetchTickets();
+        } else {
+            const err = await res.json();
+            alert("Update failed: " + (err.detail || "Server error"));
+        }
+    }
+
+    document.getElementById('newTicketForm').onsubmit = async (e) => {
+    e.preventDefault();
+    
+    const techVal = document.getElementById('new_technician_id').value;
+    
+    const payload = {
+        customer_id: parseInt(document.getElementById('new_customer_id').value),
+        product_id: parseInt(document.getElementById('new_product_id').value),
+        // If technician dropdown is empty, send null. Otherwise, send integer.
+        technician_id: (techVal && techVal !== "") ? parseInt(techVal) : null,
+        remarks: document.getElementById('new_remarks').value || "",
+        estimate_parts: 0.0,
+        estimate_labor: 0.0
+    };
+
+    console.log("Submitting Payload:", payload);
+
+    const res = await fetch('/api/service/tickets', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+        location.reload();
+    } else {
+        const err = await res.json();
+        // This will now show the REAL database error in an alert box
+        alert("CRITICAL ERROR: " + JSON.stringify(err.detail));
+    }
+};
+
+    async function deleteTicket(id) {
+        if(confirm("Delete ticket #" + id + "?")) {
+            const res = await fetch(`/api/service/tickets/${id}`, { method: 'DELETE' });
+            if(res.ok) fetchTickets();
+        }
+    }
+
+    loadData();
+</script>

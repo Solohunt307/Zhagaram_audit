@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-warning text-dark">
+        <h4>Add New Product</h4>
+    </div>
+    <div class="card-body">
+        <form id="add-product-form" class="row g-3">
+            <div class="col-md-3">
+                <label for="sku" class="form-label">SKU *</label>
+                <input type="text" class="form-control" id="sku" required>
+            </div>
+            <div class="col-md-3">
+                <label for="model" class="form-label">Model *</label>
+                <input type="text" class="form-control" id="model" required>
+            </div>
+            <div class="col-md-3">
+                <label for="variant" class="form-label">Variant</label>
+                <input type="text" class="form-control" id="variant">
+            </div>
+            <div class="col-md-3">
+                <label for="color" class="form-label">Color</label>
+                <input type="text" class="form-control" id="color">
+            </div>
+
+            <div class="col-md-3">
+                <label for="purchase_price" class="form-label">Purchase Price *</label>
+                <input type="number" step="0.01" class="form-control" id="purchase_price" required>
+            </div>
+            <div class="col-md-3">
+                <label for="sale_price" class="form-label">Sale Price *</label>
+                <input type="number" step="0.01" class="form-control" id="sale_price" required>
+            </div>
+            <div class="col-md-3">
+                <label for="tax_rate" class="form-label">Tax Rate (%)</label>
+                <input type="number" step="0.01" class="form-control" id="tax_rate" value="0">
+            </div>
+            <div class="col-md-3">
+                <label for="stock_qty" class="form-label">Initial Stock Qty</label>
+                <input type="number" class="form-control" id="stock_qty" value="0">
+            </div>
+
+            <div class="col-md-3">
+                <label for="low_stock_threshold" class="form-label">Low Stock Threshold</label>
+                <input type="number" class="form-control" id="low_stock_threshold" value="5">
+            </div>
+            
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary" style="background-color: var(--color-dark-blue);">Add Product</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Product Inventory (Total Stock)</h3>
+    <p>Low Stock Alert: <span id="low-stock-count">0</span> products below threshold.</p>
+    <table id="product-table" class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th>SKU</th>
+                <th>Model / Variant</th>
+                <th>Sale Price</th>
+                <th>Stock Qty</th>
+                <th>Threshold</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    // Global array to store fetched products for easy lookup during edit
+    let allProducts = [];
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchProducts();
+        setupProductForm();
+    });
+    
+    // --- PRODUCT LISTING LOGIC ---
+    async function fetchProducts() {
+        try {
+            const response = await fetch('/api/products');
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const products = await response.json();
+            
+            // NEW: Store the fetched list globally
+            if (!Array.isArray(products)) {
+                console.error('API did not return a list of products:', products);
+                throw new Error('Invalid data format received from product API.');
+            }
+            allProducts = products; // Store the data here!
+
+            const tableBody = document.querySelector('#product-table tbody');
+            let lowStockCount = 0;
+            tableBody.innerHTML = ''; // Clear existing rows
+
+            allProducts.forEach(p => { // Use allProducts
+                if (p.stock_qty <= p.low_stock_threshold) {
+                    lowStockCount++;
+                }
+
+                const row = tableBody.insertRow();
+                // FIX APPLIED HERE: Cleaned up indentation and ensured all columns are present.
+                row.innerHTML = `
+                    <td>${p.sku}</td>
+                    <td>${p.model} / ${p.variant || '-'}</td>
+                    <td>₹${p.sale_price.toFixed(2)}</td>
+                    <td style="color: ${p.stock_qty <= p.low_stock_threshold ? 'var(--color-error)' : 'var(--color-success)'}">${p.stock_qty}</td>
+                    <td>${p.low_stock_threshold}</td>
+                    <td>
+                        <button class="btn-secondary" onclick="editProduct(${p.id})">Edit</button>
+                        <button class="btn-danger btn-sm" onclick="deleteProduct(${p.id})">Delete</button>
+                    </td>
+                `;
+            });
+            document.getElementById('low-stock-count').textContent = lowStockCount;
+
+        } catch (error) {
+            console.error('Error fetching products:', error);
+            alert('Failed to load products. Check the console for details.');
+        }
+    }
+    
+    // --- EDIT BUTTON HANDLER (New Logic) ---
+    function editProduct(id) {
+        const product = allProducts.find(p => p.id === id);
+        if (!product) {
+            showNotification('Error: Product details not found.', 'danger');
+            return;
+        }
+
+        // 1. Change the form header and button text
+        document.querySelector('.card-header h4').textContent = `Edit Product (ID: ${product.id})`;
+        const submitButton = document.getElementById('add-product-form').querySelector('button[type="submit"]');
+        submitButton.textContent = 'Update Product';
+        submitButton.classList.add('btn-warning');
+        submitButton.classList.remove('btn-primary');
+        
+        // 2. Store the ID in the form's dataset for submission logic
+        document.getElementById('add-product-form').dataset.productId = product.id;
+
+        // 3. Populate all input fields
+        document.getElementById('sku').value = product.sku;
+        document.getElementById('model').value = product.model;
+        document.getElementById('variant').value = product.variant || '';
+        document.getElementById('color').value = product.color || '';
+        // Use precision for price fields
+        document.getElementById('purchase_price').value = product.purchase_price.toFixed(2);
+        document.getElementById('sale_price').value = product.sale_price.toFixed(2);
+        document.getElementById('tax_rate').value = product.tax_rate;
+        document.getElementById('stock_qty').value = product.stock_qty;
+        document.getElementById('low_stock_threshold').value = product.low_stock_threshold;
+        
+        // Optional: Scroll to the form
+        document.getElementById('add-product-form').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // --- NEW: PRODUCT DELETION LOGIC ---
+    async function deleteProduct(id) {
+        if (!confirm(`Are you sure you want to delete Product ID: ${id}? This action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/products/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok) {
+                showNotification(`Product ID ${id} deleted successfully.`, 'success');
+                await fetchProducts(); // Reload the list to remove the deleted product
+            } else if (response.status === 404) {
+                showNotification(`Error: Product ID ${id} not found.`, 'danger');
+            } else {
+                const errorData = await response.json();
+                showNotification(`Failed to delete product: ${errorData.detail || response.statusText}`, 'danger');
+            }
+        } catch (error) {
+            console.error('Network error during deletion:', error);
+            showNotification('Network error while attempting to delete product.', 'danger');
+        }
+    }
+
+    // --- PRODUCT SUBMISSION/UPDATE LOGIC (Modified) ---
+    function setupProductForm() {
+        document.getElementById('add-product-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Determine API call details
+            const productId = e.target.dataset.productId;
+            const isEdit = !!productId;
+            // NOTE: The backend API must support PUT/PATCH for /api/products/{id}
+            const method = isEdit ? 'PUT' : 'POST';
+            const url = isEdit ? `/api/products/${productId}` : '/api/products';
+            const actionVerb = isEdit ? 'Updated' : 'Added';
+
+            const productData = {
+                sku: document.getElementById('sku').value,
+                model: document.getElementById('model').value,
+                variant: document.getElementById('variant').value,
+                color: document.getElementById('color').value,
+                // Ensure data types are correct before sending
+                purchase_price: parseFloat(document.getElementById('purchase_price').value),
+                sale_price: parseFloat(document.getElementById('sale_price').value),
+                tax_rate: parseFloat(document.getElementById('tax_rate').value) || 0.0,
+                stock_qty: parseInt(document.getElementById('stock_qty').value) || 0,
+                low_stock_threshold: parseInt(document.getElementById('low_stock_threshold').value) || 5,
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(productData)
+                });
+
+                if (response.ok) {
+                    showNotification(`Product ${actionVerb} Successfully. Task Done!`, 'success');
+                    e.target.reset(); // Clear the form
+                    
+                    // Cleanup the edit state back to 'Add New Product'
+                    delete e.target.dataset.productId;
+                    document.querySelector('.card-header h4').textContent = 'Add New Product';
+                    const submitButton = e.target.querySelector('button[type="submit"]');
+                    submitButton.textContent = 'Add Product';
+                    submitButton.classList.add('btn-primary');
+                    submitButton.classList.remove('btn-warning');
+                    
+                    await fetchProducts(); // Reload the list
+
+                } else {
+                    const errorData = await response.json();
+                    const errorMessage = errorData.detail || `Failed to ${isEdit ? 'update' : 'add'} product due to validation error.`;
+                    showNotification(errorMessage, 'danger');
+                }
+            } catch (error) {
+                console.error('Network error:', error);
+                showNotification(`Network error while attempting to ${isEdit ? 'update' : 'add'} product.`, 'danger');
+            }
+        });
+    }
+</script>
+{% endblock %}

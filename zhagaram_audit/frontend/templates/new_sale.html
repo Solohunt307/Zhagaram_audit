@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-cart-plus me-2"></i>New Sale / Quote</h2>
+        <a href="/sales" class="btn btn-secondary"><i class="fas fa-arrow-left me-1"></i> Back to Sales List</a>
+    </div>
+
+    <div class="card shadow p-4">
+        <form id="new-sale-form">
+            
+            <div class="mb-4">
+                <label for="customer_id" class="form-label fw-bold">Select Customer</label>
+                <select class="form-select" id="customer_id" required>
+                    <option value="">-- Select Customer --</option>
+                    </select>
+                <div class="form-text">If the customer is new, please add them via the CRM page first.</div>
+            </div>
+
+            <h5 class="mt-4 mb-3"><i class="fas fa-list-alt me-1"></i> Line Items</h5>
+            <div class="table-responsive mb-4">
+                <table class="table table-bordered" id="items-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 50%;">Product</th>
+                            <th style="width: 20%;">Quantity</th>
+                            <th style="width: 20%;">Price (Subtotal)</th>
+                            <th style="width: 10%;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        </tbody>
+                </table>
+            </div>
+            
+            <button type="button" class="btn btn-sm btn-outline-success mb-4" id="add-item-btn">
+                <i class="fas fa-plus me-1"></i> Add Product
+            </button>
+            
+            <div class="row">
+                <div class="col-md-6 offset-md-6">
+                    <div class="text-end fw-bold fs-5">
+                        <label>Total Amount:</label>
+                        <span id="display-total">0.00</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                <button type="submit" class="btn btn-warning me-md-2" name="status" value="QUOTE">Save as Quote</button>
+                <button type="submit" class="btn btn-primary" name="status" value="INVOICE">Create Invoice</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('new-sale-form');
+        const itemsTableBody = document.getElementById('items-table').querySelector('tbody');
+        const addItemButton = document.getElementById('add-item-btn');
+        const customerSelect = document.getElementById('customer_id');
+        const displayTotal = document.getElementById('display-total');
+        
+        let productsList = []; // Stores product data fetched from API
+
+        // --- 1. Fetch Customers and Products ---
+        async function fetchInitialData() {
+            try {
+                // Fetch Customers
+                const customerResponse = await fetch('/api/customers/');
+                const customers = await customerResponse.json();
+                customers.forEach(customer => {
+                    const option = document.createElement('option');
+                    option.value = customer.id;
+                    option.textContent = customer.name;
+                    customerSelect.appendChild(option);
+                });
+
+                // Fetch Products
+                const productResponse = await fetch('/api/products/'); // Assuming this route exists
+                productsList = await productResponse.json();
+                
+                // Add initial product row
+                if (productsList.length > 0) {
+                    addProductRow();
+                }
+
+            } catch (error) {
+                console.error('Error fetching initial data:', error);
+                alert('Failed to load required data (Customers/Products). Check console for details.');
+            }
+        }
+
+        // --- 2. Dynamic Row Management ---
+        function addProductRow() {
+            const newRow = itemsTableBody.insertRow();
+            newRow.classList.add('item-row');
+            
+            // Product Selector Cell
+            const productCell = newRow.insertCell();
+            const productSelect = document.createElement('select');
+            productSelect.classList.add('form-select', 'product-select');
+            productSelect.name = 'product_id';
+            productSelect.required = true;
+            
+            let defaultOption = document.createElement('option');
+            defaultOption.value = "";
+            defaultOption.textContent = "-- Select Product --";
+            productSelect.appendChild(defaultOption);
+
+            productsList.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.id;
+                option.textContent = `${product.name} (Rs. ${product.sale_price.toFixed(2)})`;
+                option.setAttribute('data-price', product.sale_price);
+                productSelect.appendChild(option);
+            });
+            productCell.appendChild(productSelect);
+            
+            // Quantity Cell
+            const qtyCell = newRow.insertCell();
+            const qtyInput = document.createElement('input');
+            qtyInput.type = 'number';
+            qtyInput.classList.add('form-control', 'quantity-input');
+            qtyInput.name = 'quantity';
+            qtyInput.value = 1;
+            qtyInput.min = 1;
+            qtyInput.required = true;
+            qtyCell.appendChild(qtyInput);
+            
+            // Price/Subtotal Cell
+            const priceCell = newRow.insertCell();
+            priceCell.classList.add('text-end', 'item-subtotal');
+            priceCell.textContent = '0.00';
+            
+            // Action (Delete) Cell
+            const actionCell = newRow.insertCell();
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.classList.add('btn', 'btn-danger', 'btn-sm', 'delete-item-btn');
+            deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            deleteBtn.addEventListener('click', function() {
+                if (itemsTableBody.rows.length > 1) {
+                    newRow.remove();
+                    calculateTotals();
+                } else {
+                    alert("A sale must contain at least one product line item.");
+                }
+            });
+            actionCell.appendChild(deleteBtn);
+
+            // Add change listeners to the new row elements
+            productSelect.addEventListener('change', calculateTotals);
+            qtyInput.addEventListener('input', calculateTotals);
+        }
+
+        addItemButton.addEventListener('click', addProductRow);
+
+        // --- 3. Calculation Logic ---
+        function calculateTotals() {
+            let grandTotal = 0;
+            const rows = itemsTableBody.querySelectorAll('.item-row');
+            
+            rows.forEach(row => {
+                const productSelect = row.querySelector('.product-select');
+                const qtyInput = row.querySelector('.quantity-input');
+                const subtotalCell = row.querySelector('.item-subtotal');
+                
+                const selectedOption = productSelect.options[productSelect.selectedIndex];
+                const price = parseFloat(selectedOption.getAttribute('data-price')) || 0;
+                const quantity = parseInt(qtyInput.value) || 0;
+                
+                const subtotal = price * quantity;
+                grandTotal += subtotal;
+                
+                subtotalCell.textContent = subtotal.toFixed(2);
+            });
+            
+            displayTotal.textContent = grandTotal.toFixed(2);
+        }
+        
+        // --- 4. Form Submission ---
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Determine status from the button clicked
+            const submitter = e.submitter;
+            const status = submitter.value; 
+
+            const saleItems = [];
+            const rows = itemsTableBody.querySelectorAll('.item-row');
+
+            rows.forEach(row => {
+                const productSelect = row.querySelector('.product-select');
+                const qtyInput = row.querySelector('.quantity-input');
+
+                const product_id = parseInt(productSelect.value);
+                const quantity = parseInt(qtyInput.value);
+
+                if (product_id && quantity > 0) {
+                    saleItems.push({ product_id, quantity });
+                }
+            });
+
+            if (!saleItems.length) {
+                alert("Please add at least one valid product to the sale.");
+                return;
+            }
+
+            const payload = {
+                customer_id: parseInt(customerSelect.value),
+                items: saleItems,
+                status: status,
+                // payment_type defaults to CASH in API for now
+            };
+
+            try {
+                const response = await fetch('/api/sales', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert(`Sale/Quote created successfully! Invoice No: ${result.invoice_number}`);
+                    window.location.href = '/sales'; // Redirect to list page
+                } else {
+                    alert(`Error creating sale: ${result.detail || response.statusText}`);
+                }
+            } catch (error) {
+                console.error('Submission error:', error);
+                alert('A network error occurred during submission.');
+            }
+        });
+
+        // Load initial data and set up first row
+        fetchInitialData();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card login-card p-5" style="width: 100%; max-width: 450px;">
+    <h2 class="card-title text-center mb-1 login-title">ZHAGARAGAM MOTORS PVT LTD</h2>
+    <p class="text-center text-muted mb-4">Zhagaram Audit Login</p>
+    
+    <form id="login-form">
+        <div class="mb-3">
+            <label for="username" class="form-label">Username</label>
+            <input type="text" class="form-control" id="username" placeholder="Enter username" required>
+        </div>
+        <div class="mb-4">
+            <label for="password" class="form-label">Password</label>
+            <input type="password" class="form-control" id="password" placeholder="Enter password" required>
+        </div>
+        
+        <div id="login-error" class="alert alert-danger d-none" role="alert"></div>
+        
+        <button type="submit" class="btn btn-block" style="background-color: var(--color-saffron); color: white;">Log In</button>
+        <p class="text-center text-muted mt-3"><small>Default Admin: admin / admin123</small></p>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+   // /frontend/templates/login.html (PERMANENT FIX: SEND JSON)
+
+document.getElementById('login-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const errorDiv = document.getElementById('login-error');
+    errorDiv.classList.add('d-none');
+
+    try {
+        // --- FINAL, JSON SUBMISSION START ---
+        
+        const loginData = {
+            username: username,
+            password: password
+        };
+
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            // CRITICAL: Explicitly send JSON content type
+            headers: {
+                'Content-Type': 'application/json' 
+            },
+            body: JSON.stringify(loginData) 
+        });
+
+        // --- FINAL, JSON SUBMISSION END ---
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Login failed. Please check credentials.');
+        }
+
+        const data = await response.json();
+        
+        // Save token and redirect
+        localStorage.setItem('access_token', data.access_token);
+        window.location.href = '/dashboard';
+
+    } catch (error) {
+        errorDiv.textContent = error.message;
+        errorDiv.classList.remove('d-none');
+    }
+});
+</script>
+{% endblock %}

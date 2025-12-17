@@ -1,0 +1,94 @@
+{% include 'base.html' %}
+
+<div class="container-fluid pt-4 px-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="text-primary"><i class="fas fa-file-invoice-dollar me-2"></i>Accounting Ledger</h3>
+        <button onclick="exportSales()" class="btn btn-outline-primary">
+            <i class="fa fa-download me-2"></i>Export CSV
+        </button>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-sm-6 col-xl-3">
+            <div class="bg-secondary rounded p-4">
+                <p class="mb-2">Total Sales (Revenue)</p>
+                <h4 class="mb-0 text-primary" id="stat_total">₹0</h4>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="bg-secondary rounded p-4">
+                <p class="mb-2">Total GST Collected</p>
+                <h4 class="mb-0 text-success" id="stat_gst">₹0</h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-secondary rounded p-4">
+        <div class="table-responsive">
+            <table class="table text-start align-middle table-bordered table-hover mb-0">
+                <thead>
+                    <tr class="text-white">
+                        <th>Date</th>
+                        <th>Invoice No</th>
+                        <th>Total Amount</th>
+                        <th>GST Component</th>
+                        <th>Balance Due</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="ledgerTableBody">
+                    <tr><td colspan="6" class="text-center text-muted">Loading accounting data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function loadAccountingData() {
+        try {
+            const res = await fetch('/api/accounting/ledger/data');
+            if (!res.ok) throw new Error("Backend Error");
+            const data = await res.json();
+            
+            let runningTotal = 0;
+            let runningGST = 0;
+
+            const tbody = document.getElementById('ledgerTableBody');
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No sales records found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(item => {
+                runningTotal += item.total;
+                runningGST += item.gst;
+                return `
+                    <tr>
+                        <td>${item.date}</td>
+                        <td>${item.invoice}</td>
+                        <td>₹${item.total.toFixed(2)}</td>
+                        <td class="text-success">₹${item.gst.toFixed(2)}</td>
+                        <td class="${item.balance > 0 ? 'text-danger' : ''}">₹${item.balance.toFixed(2)}</td>
+                        <td><span class="badge bg-dark">${item.status}</span></td>
+                    </tr>
+                `;
+            }).join('');
+
+            document.getElementById('stat_total').innerText = '₹' + runningTotal.toLocaleString();
+            document.getElementById('stat_gst').innerText = '₹' + runningGST.toLocaleString();
+        } catch (err) {
+            console.error(err);
+            document.getElementById('ledgerTableBody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Failed to load data.</td></tr>';
+        }
+    }
+
+    async function exportSales() {
+        const res = await fetch('/api/accounting/ledger/sales/export');
+        const data = await res.json();
+        alert(data.message + " as " + data.filename);
+    }
+
+    // Initialize
+    loadAccountingData();
+</script>

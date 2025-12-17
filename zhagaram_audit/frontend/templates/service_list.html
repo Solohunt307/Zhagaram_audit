@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-tools me-2"></i>Service Workshop</h2>
+        <a href="/service/new" class="btn btn-primary">New Ticket</a>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>Customer</th>
+                        <th>Product</th>
+                        <th>Status</th>
+                        <th>Parts Est.</th>
+                        <th>Labor Est.</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="tickets-table-body">
+                    <tr><td colspan="7" class="text-center">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // FIX for "toFixed" error: ensures we always have a valid number string
+    function safeFixed(val) {
+        const n = parseFloat(val);
+        return isNaN(n) ? "0.00" : n.toFixed(2);
+    }
+
+    async function loadTickets() {
+        try {
+            // Updated path to match backend prefix
+            const res = await fetchAPI('/api/service/tickets'); 
+            
+            if (res && res.ok) {
+                const tickets = await res.json();
+                const tableBody = document.getElementById('tickets-table-body');
+                
+                tableBody.innerHTML = tickets.length ? tickets.map(t => `
+                    <tr>
+                        <td>#${t.id}</td>
+                        <td>${t.customer_name}</td>
+                        <td>${t.product_model}</td>
+                        <td><span class="badge bg-info">${t.status}</span></td>
+                        <td>Rs. ${safeFixed(t.estimate_parts)}</td>
+                        <td>Rs. ${safeFixed(t.estimate_labor)}</td>
+                        <td><a href="/service/${t.id}" class="btn btn-sm btn-outline-primary">View</a></td>
+                    </tr>
+                `).join('') : '<tr><td colspan="7" class="text-center">No tickets found</td></tr>';
+            }
+        } catch (err) {
+            console.error("Fetch error:", err);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadTickets);
+</script>
+{% endblock %}

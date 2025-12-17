@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-file-invoice-dollar me-2"></i>Sales & Billing</h2>
+        <button class="btn btn-primary" id="new-sale-button"><i class="fas fa-plus me-1"></i> New Sale / Quote</button>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Recent Sales & Quotes</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover" id="sales-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Invoice No.</th>
+                            <th>Customer</th>
+                            <th>Date</th>
+                            <th>Total</th>
+                            <th>Paid</th>
+                            <th>Balance</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        
+        // --- NEW: Function to attach event listeners to the View/Pay buttons ---
+        function attachViewButtonListeners() {
+            document.querySelectorAll('.view-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const saleId = this.getAttribute('data-id');
+                    // Redirect to the new detail page route /sales/{id}
+                    window.location.href = `/sales/${saleId}`; 
+                });
+            });
+        }
+        // ----------------------------------------------------------------------
+
+        // Function to fetch sales data from the API
+        function loadSalesData() {
+            fetch('/api/sales/') 
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const tableBody = document.getElementById('sales-table').querySelector('tbody');
+                    tableBody.innerHTML = ''; // Clear existing data
+
+                    data.forEach(sale => {
+                        const row = tableBody.insertRow();
+                        // Ensure numerical data is formatted for display
+                        const total = parseFloat(sale.total_amount).toFixed(2);
+                        const paid = parseFloat(sale.paid_amount).toFixed(2);
+                        const balance = parseFloat(sale.balance).toFixed(2);
+                        
+                        row.insertCell().textContent = sale.id;
+                        row.insertCell().textContent = sale.invoice_number;
+                        row.insertCell().textContent = sale.customer_name;
+                        row.insertCell().textContent = sale.date;
+                        row.insertCell().textContent = total;
+                        row.insertCell().textContent = paid;
+                        row.insertCell().textContent = balance;
+                        
+                        const statusCell = row.insertCell();
+                        statusCell.innerHTML = `<span class="badge bg-${getStatusClass(sale.status)}">${sale.status}</span>`;
+                        
+                        const actionCell = row.insertCell();
+                        // CRITICAL: Ensure the button has the correct data-id attribute for the listener
+                        actionCell.innerHTML = `<button class="btn btn-sm btn-info view-btn" data-id="${sale.id}">View/Pay</button>`;
+                    });
+                    
+                    // CRITICAL: Call the new function here to make the buttons clickable
+                    attachViewButtonListeners(); 
+
+                })
+                .catch(error => {
+                    console.error('Error fetching sales data:', error);
+                    // Display user-friendly error message
+                    const tableBody = document.getElementById('sales-table').querySelector('tbody');
+                    tableBody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Failed to load sales data: ${error.message}. Check server logs for the exact error.</td></tr>`;
+                });
+        }
+
+        // Helper function for status styling
+        function getStatusClass(status) {
+            switch (status) {
+                case 'PAID': return 'success';
+                case 'INVOICE': return 'primary';
+                case 'QUOTE': return 'warning';
+                default: return 'secondary';
+            }
+        }
+
+        // Load data when the page is ready
+        loadSalesData();
+
+        // Add event listener for the New Sale button (Redirect to new form)
+        document.getElementById('new-sale-button').addEventListener('click', function() {
+            window.location.href = '/sales/new'; // Redirect to the new form page
+        });
+    });
+</script>
+{% endblock %}

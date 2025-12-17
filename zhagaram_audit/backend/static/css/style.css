@@ -1,0 +1,80 @@
+/* backend/static/css/style.css */
+
+:root {
+    --color-saffron: #FF9933; /* Saffron color */
+    --color-dark-green: #138808; /* Dark Green */
+    --color-dark-blue: #000080; /* Dark Blue for header/footer/text */
+    --color-golden: #FFD700; /* Golden color for buttons */
+    --color-text-light: #ffffff;
+    --color-text-dark: #343a40;
+}
+
+body {
+    background-color: #f8f9fa; 
+    font-family: 'Arial', sans-serif;
+}
+
+/* --- Login Page Styling (Saffron & Dark Green) --- */
+.login-bg {
+    background: linear-gradient(135deg, var(--color-saffron) 0%, var(--color-dark-green) 100%);
+    height: 100vh;
+}
+.login-card {
+    border: none;
+    border-radius: 15px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+}
+.login-title {
+    color: var(--color-dark-green);
+    font-weight: bold;
+}
+
+/* --- Dashboard/General Styling (Dark Blue & Golden) --- */
+
+/* Header & Footer */
+.app-header {
+    background-color: var(--color-dark-blue);
+    color: var(--color-text-light);
+    padding: 1rem 1.5rem;
+}
+.app-footer {
+    background-color: var(--color-dark-blue);
+    color: var(--color-text-light);
+    padding: 15px;
+    text-align: center;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    font-size: 0.9rem;
+    z-index: 1000;
+}
+
+/* Dashboard Module Buttons (Golden) */
+.module-button {
+    background-color: var(--color-golden);
+    color: var(--color-dark-blue);
+    border: 2px solid var(--color-saffron);
+    padding: 20px;
+    font-size: 1.25rem;
+    font-weight: bold;
+    border-radius: 8px;
+    text-align: center;
+    transition: all 0.2s;
+    text-decoration: none; /* Make it look like a button, not just text */
+    display: block;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.module-button:hover {
+    background-color: #e0b400; /* Darker golden on hover */
+    color: var(--color-dark-blue);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Task Done Notification */
+#notification-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 2000;
+}

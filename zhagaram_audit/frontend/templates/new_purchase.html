@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-success text-white">
+        <h4>Create New Purchase Order (PO)</h4>
+    </div>
+    <div class="card-body">
+        <form id="new-purchase-form">
+            
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label for="supplier-select" class="form-label">Select Supplier *</label>
+                    <select class="form-select" id="supplier-select" required>
+                        <option value="" disabled selected>Loading suppliers...</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="po-remarks" class="form-label">Remarks / Notes</label>
+                    <textarea class="form-control" id="po-remarks" rows="1"></textarea>
+                </div>
+            </div>
+
+            <hr>
+            <h5>Products to Purchase</h5>
+            <div id="items-container">
+                </div>
+            
+            <div class="d-flex justify-content-between align-items-center mb-4 mt-3">
+                <button type="button" class="btn btn-info btn-sm" id="add-item-btn">
+                    + Add Product Line
+                </button>
+                <h4 class="m-0">
+                    Total Amount: <span id="total-amount-display" class="badge bg-secondary">0.00</span>
+                </h4>
+            </div>
+
+            <button type="submit" class="btn btn-success w-100" id="submit-purchase-btn">Create Purchase Order</button>
+            <a href="/purchases" class="btn btn-light w-100 mt-2">Cancel and Go Back</a>
+        </form>
+    </div>
+</div>
+
+<script>
+    let allProducts = [];
+    const itemsContainer = document.getElementById('items-container');
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchSuppliers();
+        fetchProducts();
+        document.getElementById('add-item-btn').addEventListener('click', addItemRow);
+        document.getElementById('new-purchase-form').addEventListener('submit', handleCreatePurchase);
+    });
+
+    // --- Data Fetching ---
+
+    async function fetchSuppliers() {
+        try {
+            const response = await fetch('/api/purchases/suppliers');
+            const suppliers = await response.json();
+            const select = document.getElementById('supplier-select');
+            select.innerHTML = '<option value="" disabled selected>Select a Supplier</option>';
+            suppliers.forEach(s => {
+                const option = document.createElement('option');
+                option.value = s.id;
+                option.textContent = s.name;
+                select.appendChild(option);
+            });
+            if (suppliers.length === 0) {
+                   select.innerHTML = '<option value="" disabled selected>No suppliers found. Add one first!</option>';
+                   document.getElementById('submit-purchase-btn').disabled = true;
+            } else {
+                document.getElementById('submit-purchase-btn').disabled = false;
+            }
+        } catch (error) {
+            console.error('Error fetching suppliers:', error);
+            showNotification('Failed to load suppliers.', 'danger');
+        }
+    }
+
+    async function fetchProducts() {
+        try {
+            // Assuming you have a route to fetch all products for the purchase items
+            const response = await fetch('/api/products'); 
+            allProducts = await response.json();
+            addItemRow(); // Add the first empty item row once products are loaded
+        } catch (error) {
+            console.error('Error fetching products:', error);
+            showNotification('Failed to load products.', 'danger');
+        }
+    }
+
+    // --- Item Row Management ---
+
+    function createProductSelect(itemIndex) {
+        const select = document.createElement('select');
+        select.className = 'form-select product-select';
+        select.dataset.index = itemIndex;
+        select.setAttribute('required', 'required');
+        
+        let options = '<option value="" disabled selected>Select Product</option>';
+        allProducts.forEach(p => {
+            // Ensure product ID and purchase price are correctly stored as data attributes
+            options += `<option value="${p.id}" data-price="${p.purchase_price || 0}">${p.model} (${p.sku})</option>`;
+        });
+        select.innerHTML = options;
+        select.addEventListener('change', updateRowPrice);
+        return select;
+    }
+
+    function addItemRow() {
+        // Prevent adding rows if no products are loaded (to avoid broken rows)
+        if (allProducts.length === 0) {
+            showNotification('Cannot add products: Product list is empty or failed to load.', 'warning');
+            return;
+        }
+        
+        const itemIndex = itemsContainer.children.length;
+
+        const row = document.createElement('div');
+        row.className = 'row g-3 mb-2 purchase-item-row';
+        row.dataset.index = itemIndex;
+        row.innerHTML = `
+            <div class="col-md-5"></div>
+            <div class="col-md-2">
+                <input type="number" class="form-control item-quantity" data-index="${itemIndex}" placeholder="Quantity" min="1" required value="1">
+            </div>
+            <div class="col-md-3">
+                <input type="number" class="form-control item-price" data-index="${itemIndex}" placeholder="Unit Price" step="0.01" min="0" required>
+            </div>
+            <div class="col-md-2 d-flex align-items-center">
+                <span class="fw-bold me-2 item-total">0.00</span>
+                <button type="button" class="btn btn-outline-danger btn-sm remove-item-btn" data-index="${itemIndex}">X</button>
+            </div>
+        `;
+        
+        // Replace placeholder with the actual select element
+        row.querySelector('.col-md-5').appendChild(createProductSelect(itemIndex));
+        
+        // Add event listeners for quantity and price changes
+        const quantityInput = row.querySelector('.item-quantity');
+        const priceInput = row.querySelector('.item-price');
+
+        quantityInput.addEventListener('input', calculateTotal);
+        priceInput.addEventListener('input', calculateTotal);
+        row.querySelector('.remove-item-btn').addEventListener('click', removeItemRow);
+
+        itemsContainer.appendChild(row);
+        calculateTotal(); // Recalculate total after adding a row
+    }
+
+    function removeItemRow(e) {
+        const row = e.target.closest('.purchase-item-row');
+        // Ensure there is at least one row remaining
+        if (itemsContainer.children.length > 1) {
+            row.remove();
+            calculateTotal();
+        } else {
+            showNotification('You must have at least one product line.', 'warning');
+        }
+    }
+    
+    // --- Price and Total Calculation ---
+
+    function updateRowPrice(e) {
+        const select = e.target;
+        const selectedOption = select.options[select.selectedIndex];
+        // Use selectedOption.dataset.price to get the purchase_price
+        const price = selectedOption.dataset.price;
+        
+        const row = select.closest('.purchase-item-row');
+        const priceInput = row.querySelector('.item-price');
+        
+        // Set the default price from the product's purchase_price
+        priceInput.value = price; 
+        calculateTotal();
+    }
+    
+    function calculateTotal() {
+        let grandTotal = 0;
+        document.querySelectorAll('.purchase-item-row').forEach(row => {
+            const quantityInput = row.querySelector('.item-quantity');
+            const priceInput = row.querySelector('.item-price');
+            const totalSpan = row.querySelector('.item-total');
+
+            const quantity = parseFloat(quantityInput.value) || 0;
+            const price = parseFloat(priceInput.value) || 0;
+            const rowTotal = quantity * price;
+
+            totalSpan.textContent = rowTotal.toFixed(2);
+            grandTotal += rowTotal;
+        });
+
+        document.getElementById('total-amount-display').textContent = grandTotal.toFixed(2);
+    }
+
+    // --- Form Submission ---
+    
+    async function handleCreatePurchase(e) {
+        e.preventDefault();
+
+        const supplierId = document.getElementById('supplier-select').value;
+        const remarks = document.getElementById('po-remarks').value;
+        
+        if (!supplierId) {
+            showNotification('Please select a supplier.', 'warning');
+            return;
+        }
+
+        const items = [];
+        let validationError = false;
+        document.querySelectorAll('.purchase-item-row').forEach(row => {
+            const productId = row.querySelector('.product-select').value;
+            const quantity = parseFloat(row.querySelector('.item-quantity').value);
+            const unit_price = parseFloat(row.querySelector('.item-price').value);
+
+            if (productId && quantity > 0 && unit_price >= 0) {
+                items.push({
+                    product_id: parseInt(productId),
+                    quantity: quantity,
+                    unit_price: unit_price
+                });
+            } else if (productId || quantity > 0 || unit_price >= 0) {
+                // If any field is partially filled, warn the user
+                validationError = true;
+            }
+        });
+
+        if (items.length === 0 || validationError) {
+            showNotification('Please ensure all product lines are complete and have a valid product, quantity (>0), and unit price (>=0).', 'warning');
+            return;
+        }
+        
+        // Final payload for the PO creation API
+        const purchaseData = {
+            supplier_id: parseInt(supplierId),
+            items: items,
+            remarks: remarks
+        };
+
+        try {
+            const response = await fetch('/api/purchases/', { // POST to /api/purchases/ as per purchase.py fix
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(purchaseData)
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                showNotification(`Purchase Order ${result.purchase_id} created successfully!`, 'success');
+                
+                // --- FIX: CLEAR FORM INSTEAD OF REDIRECTING ---
+                document.getElementById('new-purchase-form').reset();
+                itemsContainer.innerHTML = '';
+                addItemRow(); // Add a clean, first item row
+                calculateTotal();
+                // window.location.href = '/purchases'; // Removed to stop instant redirect
+                
+            } else {
+                const errorData = await response.json();
+                showNotification(`Failed to create PO: ${errorData.detail || response.statusText}`, 'danger');
+            }
+        } catch (error) {
+            console.error('Network error creating PO:', error);
+            showNotification('Network error while creating Purchase Order.', 'danger');
+        }
+    }
+
+    // Dummy showNotification function
+    function showNotification(message, type) {
+        console.log(`[${type.toUpperCase()}] Notification: ${message}`);
+        // This is a placeholder. You should replace 'alert' with a better UI notification system (e.g., Bootstrap alerts).
+        alert(`${type.toUpperCase()}: ${message}`); 
+    }
+</script>
+{% endblock %}
